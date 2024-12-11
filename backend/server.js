@@ -1,76 +1,75 @@
-// Import necessary libraries
-const express = require('express');  // Express.js framework for building the API
-const sqlite3 = require('sqlite3').verbose(); // SQLite database library for handling database interactions
-const cors = require('cors'); // CORS middleware to allow cross-origin requests
-const path = require('path'); // Path utility for managing file paths
-const jwt = require('jsonwebtoken'); // JWT library for creating and verifying JSON Web Tokens
-const bcrypt = require('bcrypt'); // Bcrypt for hashing passwords
-
+const express = require('express');
+const sqlite3 = require('sqlite3').verbose();
+const cors = require('cors');
+const path = require('path');
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcrypt');
 const app = express();
-
-// Middleware setup
-app.use(cors()); // Enable CORS to allow cross-origin requests
-app.use(express.json()); // Parse incoming requests with JSON payloads
-
+// Middleware
+app.use(cors());
+app.use(express.json());
 // Connect to SQLite database
 const db = new sqlite3.Database('butteries.db', (err) => {
   if (err) {
-    console.error('Error opening database:', err); // Log error if database fails to open
+    console.error('Error opening database:', err);
   } else {
-    console.log('Connected to SQLite database'); // Log success message if connection is established
+    console.log('Connected to SQLite database');
   }
 });
-
 // Create tables if they don't exist
 db.serialize(() => {
-  // SQL query to create the butteries table
   db.run(`
     CREATE TABLE IF NOT EXISTS butteries (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,  // Unique ID for each buttery
-      name TEXT NOT NULL,  // Name of the buttery
-      info TEXT,  // Information about the buttery (e.g., description and opening times)
-      hours_start REAL,  // Starting time in float format (e.g., 22.5 for 10:30 PM)
-      hours_end REAL,  // Ending time in float format
-      hours_days TEXT  // Days of operation stored as a comma-separated string (e.g., '0,1,2' for Sun-Tue)
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      info TEXT,
+      hours_start REAL,
+      hours_end REAL,
+      hours_days TEXT
     )
   `);
-
-  // Check if the butteries table is empty, if so, insert initial data
+  // For user authentication, you could create a users table here.
+  // For demonstration, we will hardcode a user.
+  
+  // Check if table is empty and initialize with data if needed
   db.get("SELECT COUNT(*) as count FROM butteries", [], (err, row) => {
     if (err) {
-      console.error(err); // Log error if query fails
+      console.error(err);
       return;
     }
-    // If there are no records in the butteries table, insert initial data
+    // Initial data values I pulled from current times -- this is just to populate the base database
     if (row.count === 0) {
       const initialData = [
         ['Benjamin Franklin', "Ben's Butt\nOpen 10PM-1AM | Sun-Thurs", 22, 1, '0,1,2,3,4'],
         ['Berkeley', "Marvin's\nOpen 10PM-1AM | Sun-Fri", 22, 1, '0,1,2,3,4,5'],
-        // Add other initial data...
+        ['Branford', "The Nuttery\nOpen 10:30PM-12:45AM | Sun-Fri", 22.5, 0.75, '0,1,2,3,4,5'],
+        ['Davenport', "The Dive\nOpen 10:30PM-12:45AM | Sun-Fri", 22.5, 0.75, '0,1,2,3,4,5'],
+        ['Ezra Stiles', "Moose Butt\nOpen 10PM-12:50AM | Sun-Thurs", 22, 0.833, '0,1,2,3,4'],
+        ['Grace Hopper', "The Trolley Stop\nOpen 10PM-1AM | Sun-Thurs", 22, 1, '0,1,2,3,4'],
+        ['Jonathan Edwards', "JE Buttery\nOpen 9:30PM-12:30AM | Sun-Thurs", 21.5, 0.5, '0,1,2,3,4'],
+        ['Morse', "The Morsel\nOpen 10PM-12AM | Sun-Thurs", 22, 0, '0,1,2,3,4'],
+        ['Pauli Murray', "MY Butt\nOpen 10PM-1AM | Sun-Thurs", 22, 1, '0,1,2,3,4'],
+        ['Pierson', "Pierson Knight Club\nOpen 10:30PM-12:30AM | Sun-Thurs", 22.5, 0.5, '0,1,2,3,4'],
+        ['Saybrook', "The Squiche\nOpen 9PM-12AM | Sun-Thurs", 21, 0, '0,1,2,3,4'],
+        ['Silliman', "Sillibutt\nOpen 10PM-1AM | Sun-Thurs", 22, 1, '0,1,2,3,4'],
+        ['Timothy Dwight', "TD Butt\nOpen 10PM-1AM | Sun-Thurs", 22, 1, '0,1,2,3,4'],
+        ['Trumbull', "The TrumButt\nOpen 10PM-1:30AM Sun-Thurs", 22, 1.5, '0,1,2,3,4']
       ];
-
       const stmt = db.prepare(`
         INSERT INTO butteries (name, info, hours_start, hours_end, hours_days)
         VALUES (?, ?, ?, ?, ?)
       `);
-
-      // Insert each initial data row into the database
       initialData.forEach(row => {
         stmt.run(row, (err) => {
-          if (err) console.error('Error inserting initial data:', err); // Log error if insertion fails
+          if (err) console.error('Error inserting initial data:', err);
         });
       });
-
-      stmt.finalize();  // Finalize the prepared statement after all inserts
+      stmt.finalize();
     }
   });
 });
-
-// JWT secret (should be stored in an environment variable for security)
 const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret';
-const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]; // Array of day names for easier mapping
-
-// Helper function to convert float to time string (e.g., 22.5 becomes "22:30")
+const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 function floatToTimeString(value) {
   const hours = Math.floor(value);
   const minutes = Math.round((value - hours) * 60);
@@ -78,66 +77,52 @@ function floatToTimeString(value) {
   const mStr = minutes.toString().padStart(2, '0');
   return `${hStr}:${mStr}`;
 }
-
-// Helper function to generate the info string for buttery hours
 function generateInfoFromHours(hours_start, hours_end, hours_days) {
   const startTimeStr = floatToTimeString(hours_start);
   const endTimeStr = floatToTimeString(hours_end);
   const daysStr = hours_days.split(',').map(d => dayNames[Number(d)]).join(", ");
   return `Open ${startTimeStr} - ${endTimeStr} | ${daysStr}`;
 }
-
-// Hardcoded user for demonstration (password is hashed for security)
+// Hardcoded user for demonstration: new admins can create an account
 const HARD_CODED_USER = {
   username: 'admin',
-  password: bcrypt.hashSync('password', 10) // Store password securely using bcrypt hashing
+  password: bcrypt.hashSync('password', 10) // Put a real hash here
 };
-
-// Middleware to authenticate JWT token
+// Auth Middleware
 function authenticateToken(req, res, next) {
-  const authHeader = req.headers['authorization']; // Get the Authorization header from request
+  const authHeader = req.headers['authorization'];
   if (!authHeader) return res.status(401).json({ error: 'No token provided' });
-
-  const token = authHeader.split(' ')[1]; // Get the token from the "Bearer token" format
+  const token = authHeader.split(' ')[1]; 
   if (!token) return res.status(401).json({ error: 'No token provided' });
-
-  // Verify the token
   jwt.verify(token, JWT_SECRET, (err, user) => {
-    if (err) return res.status(403).json({ error: 'Invalid token' }); // Return error if token is invalid
-    req.user = user; // Attach the decoded user info to the request object
-    next(); // Proceed to the next middleware/route handler
+    if (err) return res.status(403).json({ error: 'Invalid token' });
+    req.user = user;
+    next();
   });
 }
-
-// Login route to authenticate and generate JWT token
+// Login Route
 app.post('/login', (req, res) => {
   const { username, password } = req.body;
-
-  // Check if the username matches the hardcoded user
+  
+  // Check against hardcoded user for demonstration
   if (username !== HARD_CODED_USER.username) {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
-
-  // Compare the provided password with the stored hashed password
   bcrypt.compare(password, HARD_CODED_USER.password, (err, isMatch) => {
     if (err) return res.status(500).json({ error: err.message });
     if (!isMatch) return res.status(401).json({ error: 'Invalid credentials' });
-
-    // If credentials are valid, generate a JWT token and return it
     const token = jwt.sign({ username }, JWT_SECRET, { expiresIn: '1h' });
     return res.json({ token });
   });
 });
-
-// API route to get all butteries
+// Routes
 app.get('/api/butteries', (req, res) => {
   db.all(`SELECT * FROM butteries`, [], (err, rows) => {
     if (err) {
       return res.status(500).json({ error: err.message });
     }
-
     const butteries = rows.map(row => {
-      const info = generateInfoFromHours(row.hours_start, row.hours_end, row.hours_days); // Generate readable info
+      const info = generateInfoFromHours(row.hours_start, row.hours_end, row.hours_days);
       return {
         id: row.id,
         name: row.name,
@@ -145,25 +130,21 @@ app.get('/api/butteries', (req, res) => {
         hours: {
           start: row.hours_start,
           end: row.hours_end,
-          days: row.hours_days.split(',').map(Number), // Convert days from string to an array of integers
-          closedToday: !!row.closedToday, // Convert integer (0 or 1) to boolean
-          closedReason: row.closedReason || '' // Provide empty string if closedReason is null
+          days: row.hours_days.split(',').map(Number),
+          closedToday: !!row.closedToday, // Convert integer to boolean
+          closedReason: row.closedReason || ''
         }
       };
     });
-
-    res.json(butteries); // Send the formatted data as a JSON response
+    res.json(butteries);
   });
 });
-
-// PUT route to update buttery hours (requires authentication)
+// PUT route (Protected)
 app.put('/api/butteries/:id', authenticateToken, (req, res) => {
   const { hours } = req.body;
   const { id } = req.params;
-
-  // Convert closedToday boolean value to integer for storage
+  // Convert boolean closedToday to an integer for storage
   const closedTodayValue = hours.closedToday ? 1 : 0;
-
   db.run(
     `UPDATE butteries
      SET hours_start = ?, hours_end = ?, hours_days = ?, closedToday = ?, closedReason = ?
@@ -173,15 +154,11 @@ app.put('/api/butteries/:id', authenticateToken, (req, res) => {
       if (err) {
         return res.status(500).json({ error: err.message });
       }
-
-      // Retrieve the updated buttery data
       db.get(`SELECT * FROM butteries WHERE id = ?`, [id], (err, row) => {
         if (err) {
           return res.status(500).json({ error: err.message });
         }
-
         const info = generateInfoFromHours(row.hours_start, row.hours_end, row.hours_days);
-
         const buttery = {
           id: row.id,
           name: row.name,
@@ -194,26 +171,22 @@ app.put('/api/butteries/:id', authenticateToken, (req, res) => {
             closedReason: row.closedReason || ''
           }
         };
-
-        res.json(buttery); // Send the updated buttery data as a response
+        res.json(buttery);
       });
     }
   );
 });
-
-// Set the port for the server to listen on (default to 8000 if not specified)
 const PORT = process.env.PORT || 8000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
-
-// Handle database cleanup when server shuts down
+// Handle cleanup on server shutdown
 process.on('SIGINT', () => {
   db.close((err) => {
     if (err) {
       console.error(err.message);
     }
     console.log('Closed the database connection.');
-    process.exit(0); // Exit the process after cleanup
+    process.exit(0);
   });
 });
