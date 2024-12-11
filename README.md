@@ -96,5 +96,6 @@ This will start the server on http://localhost:8000.
     bash
     Copy code
     cd ../frontend
+    npm install web-vitals
     npm start
 This will start the React development server on http://localhost:3000.
