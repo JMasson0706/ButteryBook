@@ -99,6 +99,7 @@ This will start the server on http://localhost:8000.
     npm install web-vitals
     npm start
 This will start the React development server on http://localhost:3000.
+(You might run into an error on first boot with web-vitals: if so, reinstall using npm install web-vitals)
 
 
 
