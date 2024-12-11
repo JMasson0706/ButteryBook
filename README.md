@@ -88,7 +88,7 @@ This application displays the current open/closed status of various "butteries."
     bash
     Copy code
     cd ../backend
-    npm start
+    node server.js
 This will start the server on http://localhost:8000.
 
 5. **Run the Frontend:**
