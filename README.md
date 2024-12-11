@@ -1,7 +1,7 @@
-# ButteryBook
+# What's Open?
 A way for people to find open Butteries at Yale
 
-# CS50 Final Project: ButteryBook 
+# CS50 Final Project: What's Open?
 
 This application displays the current open/closed status of various "butteries." A **buttery** is a late-night student-run snack bar within a residential college (For those at Harvard who don't know). The application allows users to view which butteries are currently open, along with their operating hours. Administrators (whose account I have hard-coded in for now) can log in to update the hours and open/closed status of each buttery. 
 
