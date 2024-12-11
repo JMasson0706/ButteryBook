@@ -3,48 +3,69 @@ import './App.css';
 import axios from 'axios';
 
 function App() {
-  const [locations, setLocations] = useState([]);
-  const [selectedCollege, setSelectedCollege] = useState(null);
-  const [isOpen, setIsOpen] = useState(false);
-  const [openLocations, setOpenLocations] = useState([]);
+  // State variables for managing locations data and interactions
+  const [locations, setLocations] = useState([]); // Holds all buttery locations fetched from the API
+  const [selectedCollege, setSelectedCollege] = useState(null); // Index of the currently selected college
+  const [isOpen, setIsOpen] = useState(false); // Controls whether the dropdown list of colleges is open/visible
+  
+  // State variables to hold filtered lists of open/closed locations
+  const [openLocations, setOpenLocations] = useState([]); 
   const [closedLocations, setClosedLocations] = useState([]);
-  const [editCollegeIndex, setEditCollegeIndex] = useState(null);
-  const [formData, setFormData] = useState({ start: '', end: '', days: '', closedToday: false, closedReason: '' });
 
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [isLoggedIn, setIsLoggedIn] = useState(!!localStorage.getItem('token'));
-  const [loginError, setLoginError] = useState('');
-  const [showLogin, setShowLogin] = useState(false);
+  // State variables for editing a college's hours
+  const [editCollegeIndex, setEditCollegeIndex] = useState(null); 
+  const [formData, setFormData] = useState({ 
+    start: '', 
+    end: '', 
+    days: '', 
+    closedToday: false, 
+    closedReason: '' 
+  });
 
+  // Authentication and login state
+  const [username, setUsername] = useState(''); // Username input state
+  const [password, setPassword] = useState(''); // Password input state
+  const [isLoggedIn, setIsLoggedIn] = useState(!!localStorage.getItem('token')); // Whether the user is logged in (based on token presence)
+  const [loginError, setLoginError] = useState(''); // Holds login error messages
+  const [showLogin, setShowLogin] = useState(false); // Controls display of the login modal
+
+  // Fetch all buttery locations from the backend API when the component mounts
   useEffect(() => {
     axios.get('http://localhost:8000/api/butteries')
       .then(response => {
-        setLocations(response.data);
+        setLocations(response.data); // Store fetched data in state
       })
       .catch(error => console.error('Error fetching data:', error));
   }, []);
 
+  // Helper function to convert a "HH:MM" string into a floating number of hours (e.g. "22:30" -> 22.5)
   const timeToFloat = timeStr => {
     const [hours, minutes] = timeStr.split(':').map(Number);
     return hours + (minutes / 60);
   };
 
+  // Handle changes in the edit form fields, including checkboxes
   const handleFormChange = e => {
     const { name, value, type, checked } = e.target;
     setFormData({ ...formData, [name]: type === 'checkbox' ? checked : value });
   };
 
+  // Update the hours of a selected buttery by sending a PUT request to the backend
   const updateHours = async () => {
     if (editCollegeIndex !== null) {
       const butteryId = locations[editCollegeIndex].id;
+      
+      // Convert the days field (comma-separated string) into an array of integers
       const daysArray = formData.days
         .split(',')
         .map(d => parseInt(d.trim(), 10))
         .filter(d => !isNaN(d));
 
       try {
+        // Retrieve the JWT token from localStorage to authenticate the request
         const token = localStorage.getItem('token');
+        
+        // Send the update request with the new hours and closed status
         const response = await axios.put(`http://localhost:8000/api/butteries/${butteryId}`, {
           hours: {
             start: timeToFloat(formData.start),
@@ -59,10 +80,12 @@ function App() {
           }
         });
 
+        // Update the local state with the newly updated record
         const updatedLocations = [...locations];
         updatedLocations[editCollegeIndex] = response.data;
         setLocations(updatedLocations);
 
+        // Reset editing state and form data
         setEditCollegeIndex(null);
         setFormData({ start: '', end: '', days: '', closedToday: false, closedReason: '' });
       } catch (error) {
@@ -71,61 +94,73 @@ function App() {
     }
   };
 
+  // Determine which locations are currently open, based on the current time and day
   const getOpenLocations = () => {
     const now = new Date();
-    const currentHour = now.getHours() + now.getMinutes() / 60;
-    const currentDay = now.getDay();
-  
+    const currentHour = now.getHours() + now.getMinutes() / 60; // Current time in fractional hours
+    const currentDay = now.getDay(); // Sunday=0, Monday=1, etc.
+
     return locations.filter(({ hours }) => {
       const { start, end, days, closedToday } = hours;
-      if (closedToday) return false;
+      if (closedToday) return false; // If it’s closed today, not open
       const isToday = days.includes(currentDay);
-  
+
+      // If start < end: typical opening hours within the same day
+      // If start > end: overnight hours (e.g. open till 1 AM next day)
       return start < end
         ? isToday && currentHour >= start && currentHour < end
         : isToday && (currentHour >= start || currentHour < end);
     });
   };
-  
+
+  // Determine which locations are closed today due to a specific reason
   const getClosedLocations = () => {
     return locations.filter(({ hours }) => hours.closedToday);
   };
-  
 
+  // Periodically update the lists of open and closed locations every 60 seconds
   useEffect(() => {
     const interval = setInterval(() => {
       setOpenLocations(getOpenLocations());
       setClosedLocations(getClosedLocations());
     }, 60000);
 
-    // Initial load
+    // Initial load of open/closed lists
     setOpenLocations(getOpenLocations());
     setClosedLocations(getClosedLocations());
 
+    // Clean up the interval when the component unmounts
     return () => clearInterval(interval);
   }, [locations]);
 
+  // Check if a currently selected college (by index) is open
   const isCollegeOpen = (index) => {
     if (index === null) return false;
     const college = locations[index];
     return openLocations.some(loc => loc.id === college.id);
   };
 
+  // Handle login form submission
   const handleLogin = async (e) => {
     e.preventDefault();
     try {
+      // Send credentials to the backend login endpoint
       const response = await axios.post('http://localhost:8000/login', { username, password });
       const { token } = response.data;
+      
+      // Store token locally and update login state
       localStorage.setItem('token', token);
       setIsLoggedIn(true);
       setLoginError('');
       setShowLogin(false);
     } catch (error) {
+      // If login fails, show an error message
       setLoginError('Invalid login credentials.');
       console.error('Error logging in:', error);
     }
   };
 
+  // Handle logout: remove token and update state
   const handleLogout = () => {
     localStorage.removeItem('token');
     setIsLoggedIn(false);
@@ -133,9 +168,11 @@ function App() {
 
   return (
     <div data-theme="cupcake" className="min-h-screen bg-gradient-to-b from-indigo-50 to-white">
+      {/* Navigation Bar */}
       <nav className="navbar bg-base-200 px-4 shadow-sm flex justify-between items-center">
         <a className="btn btn-ghost normal-case text-xl text-indigo-800">CS50 Final Project</a>
         <div>
+          {/* If not logged in, show Login button. If logged in, show Logout button. */}
           {!isLoggedIn && (
             <button className="btn btn-primary mr-2" onClick={() => setShowLogin(!showLogin)}>
               Login
@@ -150,6 +187,7 @@ function App() {
       </nav>
 
       <div className="max-w-3xl mx-auto p-4">
+        {/* Login Modal */}
         {showLogin && !isLoggedIn && (
           <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
             <div className="p-4 bg-white shadow-md rounded-xl w-96">
@@ -191,13 +229,16 @@ function App() {
           </div>
         )}
 
+        {/* Title / Header */}
         <h1 className="text-4xl font-extrabold text-center text-indigo-800 my-8 flex items-center justify-center gap-2">
+          {/* Decorative Icon */}
           <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-indigo-800" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M3 11l18-9M4 10v12h16V10M12 10v12" />
           </svg>
           What's Open?
         </h1>
 
+        {/* Dropdown to select a college */}
         <div className="relative w-72 mx-auto">
           <button
             onClick={() => setIsOpen(!isOpen)}
@@ -265,11 +306,13 @@ function App() {
           )}
         </div>
 
+        {/* Display selected college's info if one is chosen */}
         {selectedCollege !== null && (
           <div className="mt-8 card shadow-lg bg-white">
             <div className="card-body">
               <h2 className="card-title text-3xl font-bold text-indigo-800 flex items-center gap-2">
                 {locations[selectedCollege].name}
+                {/* Show open/closed badge for the selected college */}
                 {isCollegeOpen(selectedCollege) ? (
                   <span className="badge badge-success">Open</span>
                 ) : (
@@ -283,12 +326,14 @@ function App() {
               <p className="mt-4 text-lg text-gray-600 whitespace-pre-line">
                 {locations[selectedCollege].info}
               </p>
+              {/* If logged in, show the "Edit Hours" button */}
               {isLoggedIn && (
                 <div className="card-actions mt-4">
                   <button
                     onClick={() => {
                       setEditCollegeIndex(selectedCollege);
                       const current = locations[selectedCollege].hours;
+                      // Pre-fill form with current data, converting fractional hours back to HH:MM
                       setFormData({
                         start: current.start ? `${Math.floor(current.start)}:${(current.start % 1)*60 || '00'}` : '',
                         end: current.end ? `${Math.floor(current.end)}:${(current.end % 1)*60 || '00'}` : '',
@@ -307,6 +352,7 @@ function App() {
           </div>
         )}
 
+        {/* Form for editing hours of the selected college (visible only if editing) */}
         {editCollegeIndex !== null && isLoggedIn && (
           <div className="mt-8 card shadow-md bg-gray-100">
             <div className="card-body">
@@ -375,6 +421,7 @@ function App() {
           </div>
         )}
 
+        {/* Carousel of images (Just a decorative element) */}
         <div className="carousel carousel-end rounded-box my-8 shadow-md">
           <div className="carousel-item">
             <img src="https://img.daisyui.com/images/stock/photo-1559703248-dcaaec9fab78.webp" alt="Drink" />
@@ -399,6 +446,8 @@ function App() {
           </div>
         </div>
       </div>
+
+      {/* Footer */}
       <footer className="bg-gray-100 text-center py-4">
         <p className="text-gray-600 text-sm">
           Made with  
@@ -411,3 +460,4 @@ function App() {
 }
 
 export default App;
+
